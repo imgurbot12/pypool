@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='pypool3',
-    version='0.0.1',
+    version='0.0.2',
     license='MIT',
     author='Andrew Scott',
     author_email='imgurbot12@gmail.com',
@@ -16,7 +16,7 @@ setup(
     python_requires='>=3.6',
     packages=find_packages(),
     install_requires=[
-        'dataclasses'
+        'dataclasses',
         'typing_extensions'
     ],
     classifiers=[
