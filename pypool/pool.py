@@ -7,7 +7,7 @@ import time
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TypeVar, Generic, Callable, Optional, Generator, Tuple
+from typing import Type, TypeVar, Generic, Callable, Optional, Generator, Tuple
 from typing_extensions import Self
 
 #** Variables **#
@@ -44,7 +44,7 @@ class Pool(Generic[T]):
     expiration: Optional[float] = None
     timeout:    Optional[float] = None
     cleanup:    Callable[[T], None] = lambda _: None
- 
+
     def __post_init__(self):
         self.pool       = []
         self.pool_size  = 0
@@ -52,7 +52,7 @@ class Pool(Generic[T]):
         self.min_size   = self.min_size or self.max_size
         self.next_clean = self.expiration + time.time() \
             if self.expiration else None
-    
+
     def _append(self, item: T):
         """append item w/ expiration (if enabled)"""
         expr = self.expiration + time.time() if self.expiration else None
@@ -64,8 +64,8 @@ class Pool(Generic[T]):
         self.pool_size = max(0, self.pool_size - 1)
         self.cleanup(item)
         self.condition.notify()
- 
-    def _check(self, 
+
+    def _check(self,
         entry:  Tuple[T, float],
         now:    Optional[float] = None,
         remove: bool = False,
@@ -149,7 +149,7 @@ class Pool(Generic[T]):
                     raise Full
             # append item to pool w/ expiration
             self._append(item)
-    
+
     def get_nowait(self) -> T:
         """
         alias for getting item without any blocking or timeout
@@ -162,20 +162,6 @@ class Pool(Generic[T]):
         """
         return self.put(item, block=False)
 
-    @contextmanager
-    def reserve(self, timeout: Optional[float] = None) -> Generator[T, None, None]:
-        """
-        reserve an item from the queue and place it back after usage
-
-        :param timeout: timeout on block in seconds
-        :return:        temporary access to pool resource
-        """
-        item = self.get(timeout=timeout)
-        try:
-            yield item
-        finally:
-            self.put(item, timeout=timeout)
-
     def discard(self, item: T):
         """
         notify pool to untrack a single item from pool
@@ -184,6 +170,30 @@ class Pool(Generic[T]):
         """
         with self.condition:
             self._remove(item)
+
+    @contextmanager
+    def reserve(self,
+        timeout:    Optional[float] = None,
+        discard_on: Tuple[Type[Exception], ...] = (),
+    ) -> Generator[T, None, None]:
+        """
+        reserve an item from the queue and place it back after usage
+
+        :param timeout:    timeout on block in seconds
+        :param discard_on: discard item rather than put in pool on exceptions
+        :return:           temporary access to pool resource
+        """
+        discard = False
+        item  = self.get(timeout=timeout)
+        try:
+            yield item
+        except discard_on as err:
+            discard = True
+            self.discard(item)
+            raise err
+        finally:
+            if not discard:
+                self.put(item, timeout=timeout)
 
     def drain(self):
         """
